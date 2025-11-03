@@ -50,11 +50,12 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Customer' ) ) {
 			'_ywpar_completed_profile'     => '',
 			'_ywpar_referral_registration' => array(),
 			'_ywpar_user_reusable_points'  => 0,
-			'_ywpar_shared_coupons'        => array(),
-			'ywpar_last_birthday_points'   => '',
-			'ywpar_membership_plan'        => 0,
-			'_ywpar_rank'                  => 0,
-		);
+                        '_ywpar_shared_coupons'        => array(),
+                        'ywpar_last_birthday_points'   => '',
+                        'ywpar_membership_plan'        => 0,
+                        '_ywpar_level_rewards'         => array(),
+                        '_ywpar_rank'                  => 0,
+                );
 
 		/**
 		 * Metakey to data
@@ -74,11 +75,12 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Customer' ) ) {
 			'_ywpar_completed_profile'     => 'completed_profile',
 			'_ywpar_referral_registration' => 'referral_registration',
 			'_ywpar_user_reusable_points'  => 'reusable_points',
-			'_ywpar_shared_coupons'        => 'shared_coupons',
-			'ywpar_last_birthday_points'   => 'last_birthday_points',
-			'ywpar_membership_plan'        => 'membership_plan',
-			'_ywpar_rank'                  => 'rank',
-		);
+                        '_ywpar_shared_coupons'        => 'shared_coupons',
+                        'ywpar_last_birthday_points'   => 'last_birthday_points',
+                        'ywpar_membership_plan'        => 'membership_plan',
+                        '_ywpar_level_rewards'         => 'level_rewards',
+                        '_ywpar_rank'                  => 'rank',
+                );
 
 		/**
 		 * Constructor
@@ -262,15 +264,48 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Customer' ) ) {
 		 *
 		 * @param   int $level  YITH_WC_Points_Rewards_Level_Badge id.
 		 */
-		public function set_level( $level ) {
-			$this->data['_ywpar_user_level'] = $level;
-		}
+                public function set_level( $level ) {
+                        $this->data['_ywpar_user_level'] = $level;
+                }
 
 
-		/**
-		 * Set the customer id
-		 *
-		 * @param   int $rewarded_points  Rewarded Points.
+                /**
+                 * Set rewards assigned for levels.
+                 *
+                 * @param array $level_rewards Reward data.
+                 */
+                public function set_level_rewards( $level_rewards ) {
+                        $this->data['_ywpar_level_rewards'] = is_array( $level_rewards ) ? $level_rewards : array();
+                }
+
+                /**
+                 * Append a reward entry for a level.
+                 *
+                 * @param int   $level_id    Level identifier.
+                 * @param array $reward_data Reward data.
+                 */
+                public function add_level_reward( $level_id, $reward_data ) {
+                        $level_rewards             = $this->get_level_rewards();
+                        $level_rewards[ $level_id ] = $reward_data;
+                        $this->set_level_rewards( $level_rewards );
+                }
+
+                /**
+                 * Retrieve rewards assigned to levels.
+                 *
+                 * @return array
+                 */
+                public function get_level_rewards() {
+                        $level_rewards = isset( $this->data['_ywpar_level_rewards'] ) ? $this->data['_ywpar_level_rewards'] : array();
+
+                        return is_array( $level_rewards ) ? $level_rewards : array();
+                }
+
+
+                /**
+                 * Set the customer id
+                 *
+                 * @param   int $rewarded_points  Rewarded Points.
 		 */
 		public function set_rewarded_points( $rewarded_points ) {
 			$this->data['_ywpar_rewarded_points'] = (int) $rewarded_points;
@@ -945,51 +980,285 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Customer' ) ) {
 		 *
 		 * @param   bool $check_extrapoints  Check extrapoints.
 		 */
-		public function update_level( $check_extrapoints = true ) {
-			$points_collected = $this->get_points_collected();
-			$total_points     = $this->get_total_points();
-			$points_collected = $total_points > $points_collected ? $total_points : $points_collected;
+                public function update_level( $check_extrapoints = true ) {
+                        $points_collected = $this->get_points_collected();
+                        $total_points     = $this->get_total_points();
 
-			$levels             = YITH_WC_Points_Rewards_Helper::get_levels_badges();
-			$customer_level     = $this->get_level();
-			$new_customer_level = $customer_level;
-			if ( $levels ) {
-				foreach ( $levels as $level_id => $level ) {
-					$points_to_collect = $level->get_points_to_collect();
+                        if ( $total_points <= 0 ) {
+                                $previous_level = $this->get_level();
+                                $has_changes    = false;
 
-					if ( $points_to_collect['from'] <= $points_collected && ( empty( $points_to_collect['to'] ) || $points_collected <= $points_to_collect['to'] ) ) {
-						$new_customer_level = $level_id;
-						break;
-					}
-				}
-				$new_customer_level = apply_filters( 'ywpar_update_new_customer_level', $new_customer_level, $customer_level, $points_collected, $total_points, $this->get_points_collected() );
-				if ( $new_customer_level !== $customer_level ) {
-					$this->set_level( $new_customer_level );
-					$this->save();
-					/**
-					 * DO_ACTION: ywpar_level_updated
-					 *
-					 * hook on updated level.
-					 *
-					 * @param int $new_customer_level the new level.
-					 * @param int $customer_level actual level.
-					 * @param YITH_WC_Points_Rewards_Customer $this customer object.
-					 */
-					do_action( 'ywpar_level_updated', $new_customer_level, $customer_level, $this );
-					if ( $check_extrapoints ) {
-						yith_points()->extra_points->handle_actions( array( 'level_achieved' ), $this );
-					}
-				}
-			}
+                                if ( 0 !== $points_collected ) {
+                                        $this->set_points_collected( 0 );
+                                        $has_changes = true;
+                                }
 
-		}
+                                if ( ! empty( $this->get_level_rewards() ) ) {
+                                        $this->set_level_rewards( array() );
+                                        $has_changes = true;
+                                }
+
+                                if ( $previous_level ) {
+                                        $this->set_level( 0 );
+                                        $has_changes = true;
+                                }
+
+                                if ( $has_changes ) {
+                                        $this->save();
+
+                                        if ( $previous_level ) {
+                                                /**
+                                                 * DO_ACTION: ywpar_level_updated
+                                                 *
+                                                 * Triggered when customer level changes.
+                                                 *
+                                                 * @param int $new_customer_level the new level.
+                                                 * @param int $customer_level actual level.
+                                                 * @param YITH_WC_Points_Rewards_Customer $this customer object.
+                                                 */
+                                                do_action( 'ywpar_level_updated', 0, $previous_level, $this );
+                                        }
+                                }
+
+                                return;
+                        }
+
+                        if ( $total_points > $points_collected ) {
+                                $points_collected = $total_points;
+                        }
+
+                        $levels             = YITH_WC_Points_Rewards_Helper::get_levels_badges();
+                        $customer_level     = $this->get_level();
+                        $new_customer_level = $customer_level;
+                        if ( $levels ) {
+                                foreach ( $levels as $level_id => $level ) {
+                                        $points_to_collect = $level->get_points_to_collect();
+
+                                        if ( $points_to_collect['from'] <= $points_collected && ( empty( $points_to_collect['to'] ) || $points_collected <= $points_to_collect['to'] ) ) {
+                                                $new_customer_level = $level_id;
+                                                break;
+                                        }
+                                }
+                                $new_customer_level = apply_filters( 'ywpar_update_new_customer_level', $new_customer_level, $customer_level, $points_collected, $total_points, $this->get_points_collected() );
+                                if ( $new_customer_level !== $customer_level ) {
+                                        $this->set_level( $new_customer_level );
+                                        $this->maybe_assign_level_reward( $new_customer_level, $customer_level );
+                                        $this->save();
+                                        /**
+                                         * DO_ACTION: ywpar_level_updated
+                                         *
+                                         * hook on updated level.
+                                         *
+                                         * @param int $new_customer_level the new level.
+                                         * @param int $customer_level actual level.
+                                         * @param YITH_WC_Points_Rewards_Customer $this customer object.
+                                         */
+                                        do_action( 'ywpar_level_updated', $new_customer_level, $customer_level, $this );
+                                        if ( $check_extrapoints ) {
+                                                yith_points()->extra_points->handle_actions( array( 'level_achieved' ), $this );
+                                        }
+                                }
+                        }
+
+                }
 
 
-		/**
-		 * Return the history of customer
-		 *
-		 * @param   array $args  Arguments.
-		 *
+                /**
+                 * Assign the reward configured for a level when it is achieved.
+                 *
+                 * @param int $level_id         Level identifier.
+                 * @param int $previous_level_id Previous level identifier.
+                 */
+                protected function maybe_assign_level_reward( $level_id, $previous_level_id = 0 ) {
+                        if ( empty( $level_id ) ) {
+                                return;
+                        }
+
+                        if ( ! function_exists( 'wc_get_product' ) ) {
+                                return;
+                        }
+
+                        $levels = YITH_WC_Points_Rewards_Helper::get_levels_badges();
+
+                        if ( empty( $levels ) || ! isset( $levels[ $level_id ] ) ) {
+                                return;
+                        }
+
+                        $level       = $levels[ $level_id ];
+                        $reward_type = $level->get_reward_type();
+
+                        if ( ! in_array( $reward_type, array( 'discount', 'gift_product' ), true ) ) {
+                                return;
+                        }
+
+                        if ( ! apply_filters( 'ywpar_should_assign_level_reward', true, $level, $this, $previous_level_id ) ) {
+                                return;
+                        }
+
+                        $assigned_rewards = $this->get_level_rewards();
+                        if ( isset( $assigned_rewards[ $level_id ] ) ) {
+                                return;
+                        }
+
+                        $coupon      = false;
+                        $reward_data = array(
+                                'type' => $reward_type,
+                        );
+
+                        if ( 'discount' === $reward_type ) {
+                                $discount = $level->get_reward_discount();
+                                if ( $discount <= 0 ) {
+                                        return;
+                                }
+
+                                $discount = min( 100, max( 0, (float) $discount ) );
+
+                                $coupon = $this->create_level_reward_coupon(
+                                        $level,
+                                        $reward_type,
+                                        array(
+                                                'discount_type' => 'percent',
+                                                'amount'        => $discount,
+                                        )
+                                );
+
+                                if ( ! $coupon ) {
+                                        return;
+                                }
+
+                                $reward_data['discount'] = $discount;
+                        } elseif ( 'gift_product' === $reward_type ) {
+                                $product_id = $level->get_reward_product();
+                                if ( $product_id <= 0 || ! wc_get_product( $product_id ) ) {
+                                        return;
+                                }
+
+                                $coupon = $this->create_level_reward_coupon(
+                                        $level,
+                                        $reward_type,
+                                        array(
+                                                'discount_type'          => 'percent',
+                                                'amount'                 => 100,
+                                                'product_ids'            => array( $product_id ),
+                                                'limit_usage_to_x_items' => 1,
+                                        )
+                                );
+
+                                if ( ! $coupon ) {
+                                        return;
+                                }
+
+                                $reward_data['product_id'] = $product_id;
+                        }
+
+                        if ( ! $coupon ) {
+                                return;
+                        }
+
+                        $reward_data['coupon_id']   = $coupon->get_id();
+                        $reward_data['coupon_code'] = $coupon->get_code();
+
+                        $this->add_level_reward( $level_id, $reward_data );
+
+                        /**
+                         * DO_ACTION: ywpar_level_reward_assigned
+                         *
+                         * Fires when a reward is created for a customer that achieved a level.
+                         *
+                         * @param int                                 $level_id          Level identifier.
+                         * @param array                               $reward_data       Reward data stored for the customer.
+                         * @param YITH_WC_Points_Rewards_Customer     $this              Customer instance.
+                         * @param int                                 $previous_level_id Previous level identifier.
+                         */
+                        do_action( 'ywpar_level_reward_assigned', $level_id, $reward_data, $this, $previous_level_id );
+                }
+
+
+                /**
+                 * Create a WooCommerce coupon to reward the new level.
+                 *
+                 * @param YITH_WC_Points_Rewards_Level_Badge $level Level instance.
+                 * @param string                               $type  Reward type.
+                 * @param array                                $props Coupon properties to merge.
+                 *
+                 * @return bool|WC_Coupon
+                 */
+                protected function create_level_reward_coupon( $level, $type, $props = array() ) {
+                        if ( ! class_exists( 'WC_Coupon' ) ) {
+                                return false;
+                        }
+
+                        $wc_customer = $this->get_wc_customer();
+                        $email       = ( $wc_customer && $wc_customer->get_email() ) ? $wc_customer->get_email() : '';
+
+                        $defaults = array(
+                                'code'                 => $this->generate_level_reward_coupon_code( $level, $type ),
+                                'discount_type'        => 'percent',
+                                'amount'               => 0,
+                                'usage_limit'          => 1,
+                                'usage_limit_per_user' => 1,
+                                'individual_use'       => true,
+                                'description'          => sprintf( esc_html__( 'Reward for reaching level %s', 'yith-woocommerce-points-and-rewards' ), $level->get_name() ),
+                        );
+
+                        if ( $email ) {
+                                $defaults['email_restrictions'] = array( $email );
+                        }
+
+                        $props = apply_filters( 'ywpar_level_reward_coupon_props', wp_parse_args( $props, $defaults ), $level, $this, $type );
+
+                        if ( isset( $props['amount'] ) && function_exists( 'wc_format_decimal' ) ) {
+                                $props['amount'] = wc_format_decimal( $props['amount'] );
+                        }
+
+                        $coupon = new WC_Coupon();
+
+                        try {
+                                $coupon->set_props( $props );
+                                $coupon->update_meta_data(
+                                        'ywpar_level_reward',
+                                        array(
+                                                'customer_id' => $this->get_id(),
+                                                'level_id'    => $level->get_id(),
+                                                'type'        => $type,
+                                        )
+                                );
+                                $coupon->save();
+                        } catch ( Exception $e ) {
+                                return false;
+                        }
+
+                        return $coupon;
+                }
+
+
+                /**
+                 * Generate a coupon code for a level reward.
+                 *
+                 * @param YITH_WC_Points_Rewards_Level_Badge $level Level instance.
+                 * @param string                               $type  Reward type.
+                 *
+                 * @return string
+                 */
+                protected function generate_level_reward_coupon_code( $level, $type ) {
+                        $base_name = sanitize_title( $level->get_name() );
+                        $base_name = empty( $base_name ) ? 'level-reward' : $base_name;
+
+                        do {
+                                $random = strtoupper( wp_generate_password( 6, false ) );
+                                $code   = strtoupper( $base_name . '-' . $this->get_id() . '-' . $random );
+                                $code   = apply_filters( 'ywpar_level_reward_coupon_code', $code, $level, $this, $type );
+                        } while ( function_exists( 'wc_get_coupon_id_by_code' ) && wc_get_coupon_id_by_code( $code ) );
+
+                        return $code;
+                }
+
+
+                /**
+                 * Return the history of customer
+                 *
+                 * @param   array $args  Arguments.
+                 *
 		 * @return array
 		 */
 		public function get_history( $args = array() ) {
