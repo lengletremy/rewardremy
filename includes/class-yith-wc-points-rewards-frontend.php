@@ -624,7 +624,11 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Frontend' ) ) {
 
 			$discount = '';
 
-			if ( 'fixed' === $conversion_method ) {
+                        $conversion_data = yith_points()->redeeming->get_conversion_rate_rewards();
+
+                        $conversion_data = yith_points()->redeeming->get_conversion_rate_rewards();
+
+                        if ( 'fixed' === $conversion_method ) {
 				$conversion  = yith_points()->redeeming->get_conversion_rate_rewards();
 				$point_value = (int)$conversion['money'] / (int)$conversion['points'];
 				$discount    = $total_points * $point_value;
@@ -636,7 +640,85 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Frontend' ) ) {
 				$message      = str_replace( '{points}', $total_points, $message );
 				$message      = str_replace( '{points_label}', ( $total_points > 1 ) ? $plural : $singular, $message );
 				$message      = str_replace( '{price_discount_fixed_conversion}', ! empty( $discount ) ? wc_price( $discount ) : '', $message );
-			} else { 
+                        } elseif ( 'gift_product' === $conversion_method ) {
+                                $gift_product_id = isset( $conversion_data['gift_product'] ) ? absint( $conversion_data['gift_product'] ) : 0;
+                                $product_name    = '';
+
+                                if ( $gift_product_id ) {
+                                        $product = wc_get_product( $gift_product_id );
+                                        if ( $product ) {
+                                                $product_name = $product->get_name();
+                                        }
+                                }
+
+                                $product_name = $product_name ? $product_name : esc_html__( 'gift product', 'yith-woocommerce-points-and-rewards' );
+                                $gift_label   = apply_filters(
+                                        'ywpar_gift_product_cart_label',
+                                        __( 'produit offert', 'yith-woocommerce-points-and-rewards' ),
+                                        array(
+                                                'context'     => 'message',
+                                                'product_id'  => $gift_product_id,
+                                                'max_points'  => $max_points,
+                                                'max_discount'=> $max_discount,
+                                        )
+                                );
+
+                                $message = '<form class="ywpar_apply_discounts" method="post">' . wp_nonce_field( 'ywpar_apply_discounts', 'ywpar_input_points_nonce' );
+                                $message .= sprintf(
+                                        esc_html__( 'Use %1$s %2$s to receive %3$s (%4$s).', 'yith-woocommerce-points-and-rewards' ),
+                                        '<strong>' . $max_points_formatted . '</strong>',
+                                        '<strong>' . $plural . '</strong>',
+                                        '<strong>' . esc_html( $product_name ) . '</strong>',
+                                        esc_html( $gift_label )
+                                );
+                                $message .= '<input type="hidden" name="ywpar_points_max" value="' . esc_attr( $max_points ) . '">';
+                                $message .= '<input type="hidden" name="ywpar_max_discount" value="' . esc_attr( $max_discount_2 ) . '">';
+                                $message .= '<input type="hidden" name="ywpar_rate_method" value="gift_product">';
+                                $message .= ' <span><button type="submit" class="button ywpar_apply_discounts" name="ywpar_apply_discounts" id="ywpar_apply_discounts">' . ywpar_get_option( 'label_apply_discounts' ) . '</button></span>';
+                                $message .= '</form><div class="clear"></div>';
+                        } elseif ( 'gift_product' === $conversion_method ) {
+
+                                $gift_product_id = isset( $conversion_data['gift_product'] ) ? absint( $conversion_data['gift_product'] ) : 0;
+                                $product_name    = '';
+
+                                if ( $gift_product_id ) {
+                                        $product = wc_get_product( $gift_product_id );
+                                        if ( $product ) {
+                                                $product_name = $product->get_name();
+                                        }
+                                }
+
+                                $product_name = $product_name ? $product_name : esc_html__( 'gift product', 'yith-woocommerce-points-and-rewards' );
+                                $gift_label   = apply_filters(
+                                        'ywpar_gift_product_cart_label',
+                                        __( 'produit offert', 'yith-woocommerce-points-and-rewards' ),
+                                        array(
+                                                'context'     => 'message',
+                                                'product_id'  => $gift_product_id,
+                                                'max_points'  => $max_points,
+                                                'max_discount'=> $max_discount,
+                                        )
+                                );
+
+                                $message = sprintf(
+                                        esc_html__( 'Use %1$s %2$s to receive %3$s (%4$s).', 'yith-woocommerce-points-and-rewards' ),
+                                        '<strong>' . $max_points_formatted . '</strong>',
+                                        '<strong>' . $plural . '</strong>',
+                                        '<strong>' . esc_html( $product_name ) . '</strong>',
+                                        esc_html( $gift_label )
+                                );
+                                $message .= ' <a class="ywpar-button-message" href="#" title="' . esc_attr( ywpar_get_option( 'label_apply_discounts' ) ) . '">' . ywpar_get_option( 'label_apply_discounts' ) . '</a>';
+                                $message .= '<div class="clear"></div><div class="ywpar_apply_discounts_container"><form class="ywpar_apply_discounts" method="post">' . wp_nonce_field( 'ywpar_apply_discounts', 'ywpar_input_points_nonce' ) . '
+                                    <input type="hidden" name="ywpar_points_max" value="' . esc_attr( $max_points ) . '">
+                                    <input type="hidden" name="ywpar_max_discount" value="' . esc_attr( $max_discount_2 ) . '">
+                                    <input type="hidden" name="ywpar_rate_method" value="gift_product">
+                                    <p class="form-row form-row-last">
+                                        <input type="submit" class="button" name="ywpar_apply_discounts" id="ywpar_apply_discounts" value="' . esc_attr( ywpar_get_option( 'label_apply_discounts' ) ) . '">
+                                    </p>
+                                    <div class="clear"></div>
+                                </form></div>';
+
+                        } else {
 				$message = '';
 			}
 
@@ -807,7 +889,8 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Frontend' ) ) {
 			 */
 			do_action( 'ywpar_before_rewards_message_default_layout' );
 
-			list( $conversion_method, $max_discount, $max_percentage_discount, $max_points, $min_value_to_redeem_error_msg, $minimum_points_to_redeem, $usable_points ) = yith_plugin_fw_extract( $args, 'conversion_method', 'max_discount', 'max_percentage_discount', 'max_points', 'min_value_to_redeem_error_msg', 'minimum_points_to_redeem', 'usable_points' );
+                        list( $conversion_method, $max_discount, $max_percentage_discount, $max_points, $min_value_to_redeem_error_msg, $minimum_points_to_redeem, $usable_points ) = yith_plugin_fw_extract( $args, 'conversion_method', 'max_discount', 'max_percentage_discount', 'max_points', 'min_value_to_redeem_error_msg', 'minimum_points_to_redeem', 'usable_points' );
+                        $conversion_data = yith_points()->redeeming->get_conversion_rate_rewards();
 
 			// APPLY_FILTER : ywpar_hide_value_for_max_discount: hide the message if $max_discount is < 0.
 			$max_discount_2       = apply_filters( 'ywpar_hide_value_for_max_discount', $max_discount );
@@ -964,19 +1047,60 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Frontend' ) ) {
                                     <div style="display: none" class="ywpar_min_reedem_value_error">' . $min_value_to_redeem_error_msg . '</div>
                                 </form></div>';
 
-			} else {
+                        } elseif ( 'gift_product' === $conversion_method ) {
 
-				$message  = str_replace( '{points_label}', $plural, $message );
-				$message  = str_replace( '{max_discount}', wc_price( $max_discount ), $message );
-				$message  = str_replace( '{max_percentual_discount}', $max_percentage_discount . '%', $message );
-				$message  = str_replace( '{points}', $max_points_formatted, $message );
-				$message .= ' <a class="ywpar-button-message ywpar-button-percentage-discount" href="#" title="' . esc_attr( ywpar_get_option( 'label_apply_discounts' ) ) . '">' . ywpar_get_option( 'label_apply_discounts' ) . '</a>';
-				$message .= '<div class="ywpar_apply_discounts_container"><form class="ywpar_apply_discounts" method="post">' . wp_nonce_field( 'ywpar_apply_discounts', 'ywpar_input_points_nonce' ) . '
+                                $gift_product_id = isset( $conversion_data['gift_product'] ) ? absint( $conversion_data['gift_product'] ) : 0;
+                                $product_name    = '';
+
+                                if ( $gift_product_id ) {
+                                        $product = wc_get_product( $gift_product_id );
+                                        if ( $product ) {
+                                                $product_name = $product->get_name();
+                                        }
+                                }
+
+                                $product_name = $product_name ? $product_name : esc_html__( 'gift product', 'yith-woocommerce-points-and-rewards' );
+                                $gift_label   = apply_filters(
+                                        'ywpar_gift_product_cart_label',
+                                        __( 'produit offert', 'yith-woocommerce-points-and-rewards' ),
+                                        array(
+                                                'context'     => 'message',
+                                                'product_id'  => $gift_product_id,
+                                                'max_points'  => $max_points,
+                                                'max_discount'=> $max_discount,
+                                        )
+                                );
+
+                                $message = sprintf(
+                                        esc_html__( 'Use %1$s %2$s to receive %3$s (%4$s).', 'yith-woocommerce-points-and-rewards' ),
+                                        '<strong>' . $max_points_formatted . '</strong>',
+                                        '<strong>' . $plural . '</strong>',
+                                        '<strong>' . esc_html( $product_name ) . '</strong>',
+                                        esc_html( $gift_label )
+                                );
+                                $message .= ' <a class="ywpar-button-message" href="#" title="' . esc_attr( ywpar_get_option( 'label_apply_discounts' ) ) . '">' . ywpar_get_option( 'label_apply_discounts' ) . '</a>';
+                                $message .= '<div class="clear"></div><div class="ywpar_apply_discounts_container"><form class="ywpar_apply_discounts" method="post">' . wp_nonce_field( 'ywpar_apply_discounts', 'ywpar_input_points_nonce' ) . '
+                                     <input type="hidden" name="ywpar_points_max" value="' . esc_attr( $max_points ) . '">
+                                     <input type="hidden" name="ywpar_max_discount" value="' . esc_attr( $max_discount_2 ) . '">
+                                     <input type="hidden" name="ywpar_rate_method" value="gift_product">
+                                     <p class="form-row form-row-last">
+                                        <input type="submit" class="button" name="ywpar_apply_discounts" id="ywpar_apply_discounts" value="' . esc_attr( ywpar_get_option( 'label_apply_discounts' ) ) . '">
+                                     </p>
+                                     <div class="clear"></div>
+                                </form></div>';
+                        } else {
+
+                                $message  = str_replace( '{points_label}', $plural, $message );
+                                $message  = str_replace( '{max_discount}', wc_price( $max_discount ), $message );
+                                $message  = str_replace( '{max_percentual_discount}', $max_percentage_discount . '%', $message );
+                                $message  = str_replace( '{points}', $max_points_formatted, $message );
+                                $message .= ' <a class="ywpar-button-message ywpar-button-percentage-discount" href="#" title="' . esc_attr( ywpar_get_option( 'label_apply_discounts' ) ) . '">' . ywpar_get_option( 'label_apply_discounts' ) . '</a>';
+                                $message .= '<div class="ywpar_apply_discounts_container"><form class="ywpar_apply_discounts" method="post">' . wp_nonce_field( 'ywpar_apply_discounts', 'ywpar_input_points_nonce' ) . '
                                      <input type="hidden" name="ywpar_points_max" value="' . $max_points . '">
                                      <input type="hidden" name="ywpar_max_discount" value="' . $max_discount_2 . '">
                                      <input type="hidden" name="ywpar_rate_method" value="percentage">';
 
-				$message .= '</form></div>';
+                                $message .= '</form></div>';
 			}
 			/**
 			 * DO_ACTION: ywpar_after_rewards_message

@@ -31,9 +31,12 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Redeeming_Rule' ) ) {
 			'priority'                   => 1,
 			'status'                     => 'on',
 			'type'                       => 'conversion_rate',
-			'conversion_rate'            => array(),
-			'percentage_conversion_rate' => array(),
-			'maximum_discount_type'      => 'percentage',
+                        'conversion_rate'            => array(),
+                        'percentage_conversion_rate' => array(),
+                        'reward_mode'                => '',
+                        'gift_product'               => array(),
+                        'gift_points_cost'           => 0,
+                        'maximum_discount_type'      => 'percentage',
 			'max_discount'               => 0,
 			'max_discount_percentage'    => 50,
 			'apply_to'                   => 'all_products',
@@ -119,9 +122,42 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Redeeming_Rule' ) ) {
 		 * @param string $context What the value is for. Valid values are view and edit.
 		 * @return array
 		 */
-		public function get_percentage_conversion_rate( $context = 'view' ) {
-			return (array) $this->get_prop( 'percentage_conversion_rate', $context );
-		}
+                public function get_percentage_conversion_rate( $context = 'view' ) {
+                        return (array) $this->get_prop( 'percentage_conversion_rate', $context );
+                }
+
+                /**
+                 * Return the reward mode of this rule.
+                 *
+                 * @param string $context What the value is for. Valid values are view and edit.
+                 *
+                 * @return string
+                 */
+                public function get_reward_mode( $context = 'view' ) {
+                        return $this->get_prop( 'reward_mode', $context );
+                }
+
+                /**
+                 * Return the configured gift product IDs.
+                 *
+                 * @param string $context What the value is for. Valid values are view and edit.
+                 *
+                 * @return array
+                 */
+                public function get_gift_product( $context = 'view' ) {
+                        return (array) $this->get_prop( 'gift_product', $context );
+                }
+
+                /**
+                 * Return how many points are required to get the gift product.
+                 *
+                 * @param string $context What the value is for. Valid values are view and edit.
+                 *
+                 * @return int
+                 */
+                public function get_gift_points_cost( $context = 'view' ) {
+                        return (int) $this->get_prop( 'gift_points_cost', $context );
+                }
 
 		/**
 		 * Return the maximum discount type of this rule
@@ -306,9 +342,36 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Redeeming_Rule' ) ) {
 		 *
 		 * @param array $value The value to set.
 		 */
-		public function set_percentage_conversion_rate( $value ) {
-			$this->set_prop( 'percentage_conversion_rate', (array) $value );
-		}
+                public function set_percentage_conversion_rate( $value ) {
+                        $this->set_prop( 'percentage_conversion_rate', (array) $value );
+                }
+
+                /**
+                 * Set the reward mode for the rule.
+                 *
+                 * @param string $value The value to set.
+                 */
+                public function set_reward_mode( $value ) {
+                        $this->set_prop( 'reward_mode', $value );
+                }
+
+                /**
+                 * Set the gift product list.
+                 *
+                 * @param array $value The value to set.
+                 */
+                public function set_gift_product( $value ) {
+                        $this->set_prop( 'gift_product', (array) $value );
+                }
+
+                /**
+                 * Set the gift points cost.
+                 *
+                 * @param int $value The value to set.
+                 */
+                public function set_gift_points_cost( $value ) {
+                        $this->set_prop( 'gift_points_cost', (int) $value );
+                }
 
 		/**
 		 * Set the maximum discount type

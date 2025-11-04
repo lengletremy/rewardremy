@@ -29,13 +29,16 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Level_Badge' ) ) {
 		protected $data = array(
 			'name'              => '',
 			'status'            => 'on',
-			'points_to_collect' => array(
-				'from' => '',
-				'to'   => '',
-			),
-			'badge_enabled'     => 'no',
-			'image'             => '',
-			'level_color'       => '#000000',
+                        'points_to_collect' => array(
+                                'from' => '',
+                                'to'   => '',
+                        ),
+                        'badge_enabled'     => 'no',
+                        'image'             => '',
+                        'level_color'       => '#000000',
+                        'reward_type'       => 'none',
+                        'reward_discount'   => '',
+                        'reward_product'    => 0,
 		);
 
 		/**
@@ -98,18 +101,80 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Level_Badge' ) ) {
 		 * @param string $context What the value is for. Valid values are view and edit.
 		 * @return string
 		 */
-		public function get_level_color( $context = 'view' ) {
-			return $this->get_prop( 'level_color', $context );
-		}
+                public function get_level_color( $context = 'view' ) {
+                        return $this->get_prop( 'level_color', $context );
+                }
+
+                /**
+                 * Return the reward type configured for the level.
+                 *
+                 * @param string $context What the value is for. Valid values are view and edit.
+                 *
+                 * @return string
+                 */
+                public function get_reward_type( $context = 'view' ) {
+                        return $this->get_prop( 'reward_type', $context );
+                }
+
+                /**
+                 * Return the discount configured for the level reward.
+                 *
+                 * @param string $context What the value is for. Valid values are view and edit.
+                 *
+                 * @return float
+                 */
+                public function get_reward_discount( $context = 'view' ) {
+                        $discount = $this->get_prop( 'reward_discount', $context );
+
+                        return '' === $discount ? 0 : (float) $discount;
+                }
+
+                /**
+                 * Return the product used for the gift reward.
+                 *
+                 * @param string $context What the value is for. Valid values are view and edit.
+                 *
+                 * @return int
+                 */
+                public function get_reward_product( $context = 'view' ) {
+                        return (int) $this->get_prop( 'reward_product', $context );
+                }
 
 		/**
 		 * Set the status
 		 *
 		 * @param string $value The value to set.
 		 */
-		public function set_status( $value ) {
-			$this->set_prop( 'status', $value );
-		}
+                public function set_status( $value ) {
+                        $this->set_prop( 'status', $value );
+                }
+
+                /**
+                 * Set reward type.
+                 *
+                 * @param string $value Value to set.
+                 */
+                public function set_reward_type( $value ) {
+                        $this->set_prop( 'reward_type', $value );
+                }
+
+                /**
+                 * Set reward discount.
+                 *
+                 * @param float|string $value Value to set.
+                 */
+                public function set_reward_discount( $value ) {
+                        $this->set_prop( 'reward_discount', '' === $value ? '' : (float) $value );
+                }
+
+                /**
+                 * Set reward product.
+                 *
+                 * @param int $value Product id.
+                 */
+                public function set_reward_product( $value ) {
+                        $this->set_prop( 'reward_product', absint( $value ) );
+                }
 
 		/**
 		 * Return the html of badge
