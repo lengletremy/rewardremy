@@ -100,17 +100,20 @@ if ( 'all' === $global_role_enabled ) {
 }
 
 $point_conversion_type = array();
+$reward_mode_default   = ywpar_get_option( 'conversion_rate_method', 'fixed' );
+$reward_mode_default   = in_array( $reward_mode_default, array( 'fixed', 'percentage' ), true ) ? $reward_mode_default : 'fixed';
+
 if ( 'fixed' === ywpar_get_option( 'conversion_rate_method', 'fixed' ) ) {
-	$point_conversion_type = array(
-		'title'             => esc_html__( 'Reward conversion rate', 'yith-woocommerce-points-and-rewards' ),
-		'desc'              => esc_html__( 'Choose how to calculate the discount when customers use their available points', 'yith-woocommerce-points-and-rewards' ),
-		'type'              => 'options-conversion',
-		'class'             => 'fixed_method',
-		'std'               => array(
-			$currency => array(
-				'points' => 100,
-				'money'  => 1,
-			),
+        $point_conversion_type = array(
+                'title'             => esc_html__( 'Reward conversion rate', 'yith-woocommerce-points-and-rewards' ),
+                'desc'              => esc_html__( 'Choose how to calculate the discount when customers use their available points', 'yith-woocommerce-points-and-rewards' ),
+                'type'              => 'options-conversion',
+                'class'             => 'fixed_method',
+                'std'               => array(
+                        $currency => array(
+                                'points' => 100,
+                                'money'  => 1,
+                        ),
 		),
 		'custom_attributes' => array(
 			'data-deps'       => 'ywpar_points_type,ywpar_apply_to',
@@ -166,20 +169,68 @@ $options = array(
 		'desc'  => __( 'Set the priority to assign to this rule. This is important to overwrite rules. 1 is highest priority', 'yith-woocommerce-points-and-rewards' ),
 		'std'   => 1,
 	),
-	'ywpar_points_type'                        => array(
-		'id'      => 'ywpar_points_type',
-		'name'    => 'type',
-		'type'    => 'radio',
-		'options' => array(
-			'conversion_rate' => __( 'Redeem conversion rate', 'yith-woocommerce-points-and-rewards' ),
+        'ywpar_points_type'                        => array(
+                'id'      => 'ywpar_points_type',
+                'name'    => 'type',
+                'type'    => 'radio',
+                'options' => array(
+                        'conversion_rate' => __( 'Redeem conversion rate', 'yith-woocommerce-points-and-rewards' ),
 			'max_discount'    => __( 'Redeem max discount rate', 'yith-woocommerce-points-and-rewards' ),
 		),
 		'title'   => __( 'Rule type', 'yith-woocommerce-points-and-rewards' ),
-		'desc'    => __( 'Choose how to apply the discount. The discount can either be a percentage or a fixed amount', 'yith-woocommerce-points-and-rewards' ),
-		'std'     => 'conversion_rate',
-	),
+                'desc'    => __( 'Choose how to apply the discount. The discount can either be a percentage or a fixed amount', 'yith-woocommerce-points-and-rewards' ),
+                'std'     => 'conversion_rate',
+        ),
 
-	'ywpar_rewards_percentage_conversion_rate' => $point_conversion_type,
+        'ywpar_reward_mode'                        => array(
+                'id'                => 'ywpar_reward_mode',
+                'name'              => 'reward_mode',
+                'type'              => 'radio',
+                'options'           => array(
+                        'percentage'   => esc_html__( 'Percentage discount', 'yith-woocommerce-points-and-rewards' ),
+                        'fixed'        => esc_html__( 'Fixed discount', 'yith-woocommerce-points-and-rewards' ),
+                        'gift_product' => esc_html__( 'Gift product', 'yith-woocommerce-points-and-rewards' ),
+                ),
+                'title'             => esc_html__( 'Reward type', 'yith-woocommerce-points-and-rewards' ),
+                'desc'              => esc_html__( 'Choose if this rule lets users redeem points for a percentage discount, a fixed discount or a free product.', 'yith-woocommerce-points-and-rewards' ),
+                'std'               => $reward_mode_default,
+                'custom_attributes' => array(
+                        'data-deps'       => 'ywpar_points_type',
+                        'data-deps_value' => 'conversion_rate',
+                ),
+        ),
+
+        'ywpar_rewards_percentage_conversion_rate' => $point_conversion_type,
+
+        'ywpar_gift_product'                       => array(
+                'id'                => 'ywpar_gift_product',
+                'name'              => 'gift_product',
+                'type'              => 'ajax-products',
+                'title'             => esc_html__( 'Gift product', 'yith-woocommerce-points-and-rewards' ),
+                'desc'              => esc_html__( 'Select the product that customers will receive for free when they redeem points with this rule.', 'yith-woocommerce-points-and-rewards' ),
+                'std'               => array(),
+                'data'              => array(
+                        'action'   => 'woocommerce_json_search_products_and_variations',
+                        'security' => wp_create_nonce( 'search-products' ),
+                ),
+                'custom_attributes' => array(
+                        'data-deps'       => 'ywpar_reward_mode,ywpar_points_type',
+                        'data-deps_value' => 'gift_product,conversion_rate',
+                ),
+        ),
+        'ywpar_gift_points_cost'                   => array(
+                'id'                => 'ywpar_gift_points_cost',
+                'name'              => 'gift_points_cost',
+                'type'              => 'number',
+                'min'               => 1,
+                'title'             => esc_html__( 'Points required for the gift', 'yith-woocommerce-points-and-rewards' ),
+                'desc'              => esc_html__( 'Set how many points a customer must redeem to receive the selected gift product.', 'yith-woocommerce-points-and-rewards' ),
+                'std'               => '',
+                'custom_attributes' => array(
+                        'data-deps'       => 'ywpar_reward_mode,ywpar_points_type',
+                        'data-deps_value' => 'gift_product,conversion_rate',
+                ),
+        ),
 
 	'ywpar_maximum_discount_type'              => array(
 		'id'                => 'ywpar_maximum_discount_type',

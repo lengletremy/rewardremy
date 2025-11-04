@@ -45,20 +45,41 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Redeeming' ) ) {
 		 *
 		 * @var string
 		 */
-		protected $current_coupon_code = '';
+                protected $current_coupon_code = '';
 
-		/**
-		 * Max percentage discount
-		 *
-		 * @var mixed
-		 */
-		protected $max_percentage_discount = false;
+                /**
+                 * Max percentage discount
+                 *
+                 * @var mixed
+                 */
+                protected $max_percentage_discount = false;
 
-		/**
-		 * Coupon prefix
-		 *
-		 * @var string
-		 */
+                /**
+                 * Currently matched redeeming rule.
+                 *
+                 * @var null|YITH_WC_Points_Rewards_Redeeming_Rule
+                 */
+                protected $current_rule = null;
+
+                /**
+                 * Current reward mode detected for the rule.
+                 *
+                 * @var string
+                 */
+                protected $current_reward_mode = '';
+
+                /**
+                 * Conversion method used for the current calculation.
+                 *
+                 * @var string
+                 */
+                protected $current_conversion_method = '';
+
+                /**
+                 * Coupon prefix
+                 *
+                 * @var string
+                 */
 		protected $label_coupon_prefix = 'ywpar_discount';
 
 		/**
@@ -102,18 +123,21 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Redeeming' ) ) {
 
 				// update discount.
 				add_action( 'woocommerce_cart_item_removed', array( $this, 'update_discount' ) );
-				add_action( 'woocommerce_after_cart_item_quantity_update', array( $this, 'update_discount' ) );
-				add_action( 'woocommerce_before_cart_item_quantity_zero', array( $this, 'update_discount' ) );
-				add_action( 'woocommerce_cart_loaded_from_session', array( $this, 'update_discount' ), 99 );
+                                add_action( 'woocommerce_after_cart_item_quantity_update', array( $this, 'update_discount' ) );
+                                add_action( 'woocommerce_before_cart_item_quantity_zero', array( $this, 'update_discount' ) );
+                                add_action( 'woocommerce_cart_loaded_from_session', array( $this, 'update_discount' ), 99 );
 
-				add_filter( 'woocommerce_coupon_message', array( $this, 'coupon_rewards_message' ), 15, 3 );
-				add_filter( 'woocommerce_cart_totals_coupon_label', array( $this, 'coupon_label' ), 10, 2 );
-				add_action( 'woocommerce_removed_coupon', array( $this, 'clear_current_coupon' ) );
+                                add_filter( 'woocommerce_coupon_message', array( $this, 'coupon_rewards_message' ), 15, 3 );
+                                add_filter( 'woocommerce_cart_totals_coupon_label', array( $this, 'coupon_label' ), 10, 2 );
+                                add_action( 'woocommerce_removed_coupon', array( $this, 'clear_current_coupon' ) );
 
-				add_action( 'wc_ajax_ywpar_calc_discount_value', array( $this, 'calc_discount_value' ) );
+                                add_action( 'woocommerce_before_calculate_totals', array( $this, 'set_gift_product_price' ), 20 );
+                                add_filter( 'woocommerce_cart_item_name', array( $this, 'add_gift_product_label' ), 10, 3 );
 
-				if ( ywpar_get_option( 'autoapply_points_cart_checkout', 'no' ) === 'yes' ) {
-					add_action( 'template_redirect', array( $this, 'auto_apply_discount' ), 30 );
+                                add_action( 'wc_ajax_ywpar_calc_discount_value', array( $this, 'calc_discount_value' ) );
+
+                                if ( ywpar_get_option( 'autoapply_points_cart_checkout', 'no' ) === 'yes' ) {
+                                        add_action( 'template_redirect', array( $this, 'auto_apply_discount' ), 30 );
 					add_action( 'woocommerce_checkout_order_processed', array( $this, 'clean_auto_apply_session' ) );
 					add_action( 'woocommerce_store_api_checkout_order_processed', array( $this, 'clean_auto_apply_session' ) );
 					add_action( 'woocommerce_check_cart_items', array( $this, 'clean_auto_apply_session' ) );
@@ -151,13 +175,29 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Redeeming' ) ) {
 		public function calculate_price_worth_from_points( $points, $customer, $formatted = true ) {
 			$worth = '';
 			if ( $points > 0 ) {
-				$conversion_method = $this->get_conversion_method();
-				$conversion_rate   = $this->get_conversion_rate_rewards( '', $customer );
-				if ( 'fixed' === $conversion_method ) {
-					$money = $conversion_rate['money'];
-					$worth = abs( ( $points / $conversion_rate['points'] ) * $money );
-					$worth = $formatted ? wc_price( abs( ( $points / $conversion_rate['points'] ) * $money ) ) : $worth;
-				} else {
+                                $conversion_method = $this->get_resolved_conversion_method();
+                                $conversion_rate   = $this->get_conversion_rate_rewards( '', $customer );
+                                if ( 'gift_product' === $conversion_method ) {
+                                        if ( isset( $conversion_rate['gift_product'] ) ) {
+                                                $product = wc_get_product( $conversion_rate['gift_product'] );
+                                                if ( $product ) {
+                                                        $gift_label = apply_filters(
+                                                                'ywpar_gift_product_cart_label',
+                                                                __( 'produit offert', 'yith-woocommerce-points-and-rewards' ),
+                                                                array(
+                                                                        'context'  => 'worth',
+                                                                        'product'  => $product,
+                                                                        'customer' => $customer,
+                                                                )
+                                                        );
+                                                        $worth      = $formatted ? sprintf( '%s (%s)', $product->get_name(), esc_html( $gift_label ) ) : $product->get_name();
+                                                }
+                                        }
+                                } elseif ( 'fixed' === $conversion_method ) {
+                                        $money = $conversion_rate['money'];
+                                        $worth = abs( ( $points / $conversion_rate['points'] ) * $money );
+                                        $worth = $formatted ? wc_price( abs( ( $points / $conversion_rate['points'] ) * $money ) ) : $worth;
+                                } else {
 					$discount     = $conversion_rate['discount'];
 					$to_redeem    = ( ( (int)$points / (int)$conversion_rate['points'] ) * (int)$discount );		
 					$to_redeem    = $to_redeem > 100 ? 100 : $to_redeem;
@@ -278,18 +318,27 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Redeeming' ) ) {
 		 * @return  string
 		 * @since   1.1.3
 		 */
-		public function get_conversion_method() {
-			/**
-			 * APPLY_FILTERS: ywpar_conversion_method
-			 *
-			 * filter the conversion method.
+                public function get_conversion_method() {
+                        /**
+                         * APPLY_FILTERS: ywpar_conversion_method
+                         *
+                         * filter the conversion method.
 			 */
 			return apply_filters( 'ywpar_conversion_method', ywpar_get_option( 'conversion_rate_method' ) );
-		}
+                }
 
-		/**
-		 * Return the conversion rate to redeem points
-		 *
+                /**
+                 * Return the conversion method resolved for the current rule.
+                 *
+                 * @return string
+                 */
+                protected function get_resolved_conversion_method() {
+                        return $this->current_conversion_method ? $this->current_conversion_method : $this->get_conversion_method();
+                }
+
+                /**
+                 * Return the conversion rate to redeem points
+                 *
 		 * @param string                               $currency Currency.
 		 * @param YITH_WC_Points_Rewards_Customer|null $customer Customer.
 		 *
@@ -297,49 +346,96 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Redeeming' ) ) {
 		 **/
 		public function get_conversion_rate_rewards( $currency = '', $customer = null ) {
 
-			$currency = ywpar_get_currency( $currency );
-			$customer = ywpar_get_customer( $customer );
+                        $currency                         = ywpar_get_currency( $currency );
+                        $customer                         = ywpar_get_customer( $customer );
+                        $conversion                       = array();
+                        $this->current_rule               = null;
+                        $this->current_reward_mode        = '';
+                        $this->current_conversion_method  = '';
+                        $default_conversion_method        = $this->get_conversion_method();
 
-			$conversion = array();
+                        $valid_rules = YITH_WC_Points_Rewards_Helper::get_valid_redeeming_rules( $customer );
 
-			$valid_rules = YITH_WC_Points_Rewards_Helper::get_valid_redeeming_rules( $customer );
+                        if ( $valid_rules ) {
+                                foreach ( $valid_rules as $rule ) {
+                                        $rule        = ywpar_get_redeeming_rule( $rule );
+                                        $reward_mode = $rule->get_reward_mode();
 
-			if ( $valid_rules ) {
-				foreach ( $valid_rules as $rule ) {
-					$rule = ywpar_get_redeeming_rule( $rule );
+                                        if ( 'conversion_rate' !== $rule->get_type() ) {
+                                                continue;
+                                        }
 
-					if ( 'conversion_rate' === $rule->get_type() ) {
-						$conversions = 'fixed' === $this->get_conversion_method() ? $rule->get_conversion_rate() : $rule->get_percentage_conversion_rate();
-						/**
-						 * APPLY_FILTERS: ywpar_redeeming_check_rule_validation
-						 *
-						 * filter the rule validation.
-						 * 
-						 * @param bool $validate .
-						 * @param YITH_WC_Points_Rewards_Customer $customer .
-						 * @param array $conversion .
-						 * @param string $currency .
-						 */
-						if ( isset( $conversions[ $currency ] ) && apply_filters('ywpar_redeeming_check_rule_validation', true, $customer, $conversions, $currency)) {
-							$conversion = $conversions[ $currency ];
-							break;
-						}
-					}
-				}
-			}
+                                        if ( 'gift_product' === $reward_mode ) {
+                                                $gift_points   = (int) $rule->get_gift_points_cost();
+                                                $gift_products = $rule->get_gift_product();
+                                                $gift_product  = ! empty( $gift_products ) ? absint( reset( $gift_products ) ) : 0;
 
-			if ( empty( $conversion ) ) {
-				$conversion = $this->get_main_conversion_rate( $currency );
-			}
-			/**
-			 * APPLY_FILTERS: ywpar_rewards_conversion_rate
-			 *
-			 * filter the conversion rate.
-			 * 
-			 * @param array
-			 */
-			return apply_filters( 'ywpar_rewards_conversion_rate', $conversion );
-		}
+                                                if ( $gift_points <= 0 || ! $gift_product ) {
+                                                        continue;
+                                                }
+
+                                                $product = wc_get_product( $gift_product );
+                                                if ( ! $product ) {
+                                                        continue;
+                                                }
+
+                                                $gift_price = ywpar_get_product_price( $product, 'redeem', $currency );
+
+                                                $validation_conversion = array(
+                                                        $currency => array(
+                                                                'points'       => $gift_points,
+                                                                'gift_product' => $gift_product,
+                                                                'money'        => $gift_price,
+                                                        ),
+                                                );
+
+                                                if ( apply_filters( 'ywpar_redeeming_check_rule_validation', true, $customer, $validation_conversion, $currency ) ) {
+                                                        $conversion                      = array(
+                                                                'points'       => $gift_points,
+                                                                'money'        => $gift_price,
+                                                                'gift_product' => $gift_product,
+                                                        );
+                                                        $this->current_rule              = $rule;
+                                                        $this->current_reward_mode       = 'gift_product';
+                                                        $this->current_conversion_method = 'gift_product';
+                                                        break;
+                                                }
+
+                                                continue;
+                                        }
+
+                                        $rule_conversion_method = $default_conversion_method;
+                                        if ( in_array( $reward_mode, array( 'fixed', 'percentage' ), true ) ) {
+                                                $rule_conversion_method = $reward_mode;
+                                        }
+
+                                        $conversions = 'fixed' === $rule_conversion_method ? $rule->get_conversion_rate() : $rule->get_percentage_conversion_rate();
+
+                                        if ( isset( $conversions[ $currency ] ) && apply_filters( 'ywpar_redeeming_check_rule_validation', true, $customer, $conversions, $currency ) ) {
+                                                $conversion                      = $conversions[ $currency ];
+                                                $this->current_rule              = $rule;
+                                                $this->current_reward_mode       = $reward_mode ? $reward_mode : $rule_conversion_method;
+                                                $this->current_conversion_method = $rule_conversion_method;
+                                                break;
+                                        }
+                                }
+                        }
+
+                        if ( empty( $conversion ) ) {
+                                $conversion                      = $this->get_main_conversion_rate( $currency );
+                                $this->current_conversion_method = $default_conversion_method;
+                                $this->current_reward_mode       = $default_conversion_method;
+                        }
+
+                        /**
+                         * APPLY_FILTERS: ywpar_rewards_conversion_rate
+                         *
+                         * filter the conversion rate.
+                         *
+                         * @param array
+                         */
+                        return apply_filters( 'ywpar_rewards_conversion_rate', $conversion );
+                }
 
 		/**
 		 * Return the global conversion rate.
@@ -497,25 +593,48 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Redeeming' ) ) {
 				return false;
 			}
 
-			$conversion                      = $this->get_conversion_rate_rewards( $currency, $customer );
-			$general_max_discount            = $this->get_max_discount_amount_to_redeem();
-			$general_max_percentage_discount = $this->get_max_percentage_discount_to_redeem();
-			$general_min_percentage_discount = $this->get_min_percentage_discount_to_redeem();
+                        $conversion                      = $this->get_conversion_rate_rewards( $currency, $customer );
+                        $conversion_method               = $this->get_resolved_conversion_method();
+                        $general_max_discount            = $this->get_max_discount_amount_to_redeem();
+                        $general_max_percentage_discount = $this->get_max_percentage_discount_to_redeem();
+                        $general_min_percentage_discount = $this->get_min_percentage_discount_to_redeem();
 
-			$this->calculate_max_discount_on_cart( $currency, $customer );
+                        if ( 'gift_product' !== $conversion_method ) {
+                                $this->calculate_max_discount_on_cart( $currency, $customer );
 
-			if ( $subtotal < $this->max_discount ) {
-				$this->max_discount = $subtotal;
-			}
+                                if ( $subtotal < $this->max_discount ) {
+                                        $this->max_discount = $subtotal;
+                                }
 
-			$this->max_discount = apply_filters( 'ywpar_set_max_discount_for_minor_subtotal', $this->max_discount, $subtotal );
-			
-			if ( $this->get_conversion_method() === 'fixed' ) {
-				$minimum_amount_discount_to_redeem = $this->get_min_discount_amount_to_redeem();
+                                $this->max_discount = apply_filters( 'ywpar_set_max_discount_for_minor_subtotal', $this->max_discount, $subtotal );
+                        }
 
-				if ( '' !== $general_max_discount ) {
-					// check if is present % inside the option for retro compatibility.
-					if ( strpos( $general_max_discount, '%' ) === false ) {
+                        if ( 'gift_product' === $conversion_method ) {
+                                $gift_points  = isset( $conversion['points'] ) ? (int) $conversion['points'] : 0;
+                                $gift_product = isset( $conversion['gift_product'] ) ? absint( $conversion['gift_product'] ) : 0;
+                                $gift_amount  = isset( $conversion['money'] ) ? (float) $conversion['money'] : 0;
+
+                                if ( $gift_points <= 0 || $gift_product <= 0 || $points_usable < $gift_points ) {
+                                        return false;
+                                }
+
+                                $product = wc_get_product( $gift_product );
+                                if ( ! $product ) {
+                                        return false;
+                                }
+
+                                if ( $gift_amount <= 0 ) {
+                                        $gift_amount = ywpar_get_product_price( $product, 'redeem', $currency );
+                                }
+
+                                $this->max_points   = $gift_points;
+                                $this->max_discount = $gift_amount;
+                        } elseif ( 'fixed' === $conversion_method ) {
+                                $minimum_amount_discount_to_redeem = $this->get_min_discount_amount_to_redeem();
+
+                                if ( '' !== $general_max_discount ) {
+                                        // check if is present % inside the option for retro compatibility.
+                                        if ( strpos( $general_max_discount, '%' ) === false ) {
 						$max_discount = ( $subtotal >= (float) $general_max_discount ) ? (float) $general_max_discount : $subtotal;
 					} else {
 						$general_max_discount = (float) str_replace( '%', '', $general_max_discount );
@@ -546,12 +665,12 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Redeeming' ) ) {
 				if ( $this->max_discount < $minimum_amount_discount_to_redeem ) {
 					return '';
 				}
-			} else {
+                        } else {
 
-				if ( $subtotal > 0 ) {
-					/**
-					 * APPLY_FILTERS: ywpar_cart_discount_percentage
-					 *
+                                if ( $subtotal > 0 ) {
+                                        /**
+                                         * APPLY_FILTERS: ywpar_cart_discount_percentage
+                                         *
 					 * filter the discount for percentage conversion type.
 					 *
 					 * @param int|float $discount .
@@ -581,12 +700,12 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Redeeming' ) ) {
 						return '';
 					}
 
-					if ( $points_usable >= $max_points ) {
-						$this->max_points              = $max_points;
-						$this->max_percentage_discount = $cart_discount_percentage;
-						$this->max_discount            = ( $this->max_discount * $this->max_percentage_discount ) / 100;
-					} else {
-						$this->max_percentage_discount = $max_percentage_discount;
+                                        if ( $points_usable >= $max_points ) {
+                                                $this->max_points              = $max_points;
+                                                $this->max_percentage_discount = $cart_discount_percentage;
+                                                $this->max_discount            = ( $this->max_discount * $this->max_percentage_discount ) / 100;
+                                        } else {
+                                                $this->max_percentage_discount = $max_percentage_discount;
 						$this->max_points              = round( $this->max_percentage_discount / $conversion['discount'] ) * $conversion['points'];
 						$this->max_discount            = apply_filters( 'ywpar_calculate_rewards_discount_max_discount_percentual', ( $this->max_discount * $this->max_percentage_discount ) / 100 );
 					}
@@ -873,78 +992,128 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Redeeming' ) ) {
 			 *
 			 */
 			do_action( 'ywpar_before_apply_discount_calculation' );
-			$max_points   = sanitize_text_field( wp_unslash( $posted['ywpar_points_max'] ) );
-			$max_discount = sanitize_text_field( wp_unslash( $posted['ywpar_max_discount'] ) );
+                        $max_points        = sanitize_text_field( wp_unslash( $posted['ywpar_points_max'] ) );
+                        $max_discount      = sanitize_text_field( wp_unslash( $posted['ywpar_max_discount'] ) );
+                        $conversion        = $this->get_conversion_rate_rewards();
+                        $reward_method     = $this->get_resolved_conversion_method();
+                        $discount_value    = 0;
+                        $coupon_amount     = 0;
+                        $type_discount     = 'fixed_cart';
+                        $coupon_properties = array();
 
-			$reward_method = $this->get_conversion_method();
+                        if ( 'fixed' === $reward_method ) {
 
-			$discount = 0;
-			
-			if ( 'fixed' === $reward_method ) {
+                                if ( ! isset( $posted['ywpar_input_points_check'], $posted['ywpar_input_points'] ) || empty( $posted['ywpar_input_points_check'] ) || empty( $posted['ywpar_input_points'] ) ) {
+                                        return;
+                                }
 
-				if ( ! isset( $posted['ywpar_input_points_check'], $posted['ywpar_input_points'] ) || empty( $posted['ywpar_input_points_check'] ) || empty( $posted['ywpar_input_points'] ) ) {
-					return;
-				}
-
-				$input_points            = sanitize_text_field( wp_unslash( $posted['ywpar_input_points'] ) );
-				$input_points            = ( $input_points > $max_points ) ? $max_points : $input_points;
-				$conversion              = $this->get_conversion_rate_rewards();
-				$input_max_discount      = (int)$input_points / (int)$conversion['points'] * (int)$conversion['money'];
-				$input_max_discount      = ( $input_max_discount > $max_discount ) ? $max_discount : $input_max_discount;
-				$minimum_discount_amount = $this->get_min_discount_amount_to_redeem();
+                                $input_points            = sanitize_text_field( wp_unslash( $posted['ywpar_input_points'] ) );
+                                $input_points            = ( $input_points > $max_points ) ? $max_points : $input_points;
+                                $input_max_discount      = (int)$input_points / (int)$conversion['points'] * (int)$conversion['money'];
+                                $input_max_discount      = ( $input_max_discount > $max_discount ) ? $max_discount : $input_max_discount;
+                                $minimum_discount_amount = $this->get_min_discount_amount_to_redeem();
 
 				if ( ! empty( $minimum_discount_amount ) && $input_max_discount < $minimum_discount_amount ) {
 					$input_max_discount = $minimum_discount_amount;
 					$input_points       = $conversion['points'] / $conversion['money'] * $input_max_discount;
 				}
 
-				if ( $input_max_discount > 0 ) {
-					WC()->session->set( 'ywpar_coupon_code_points', $input_points );
-					WC()->session->set( 'ywpar_coupon_code_discount', $input_max_discount );
+                                if ( $input_max_discount > 0 ) {
+                                        WC()->session->set( 'ywpar_coupon_code_points', $input_points );
+                                        WC()->session->set( 'ywpar_coupon_code_discount', $input_max_discount );
 
-					$discount = $input_max_discount;
-					/**
-					 * APPLY_FILTERS: ywpar_adjust_discount_value
-					 *
-					 * filter the dicount value.
-					 */
-					$discount = apply_filters( 'ywpar_adjust_discount_value', $discount );
-				};
+                                        $discount_value = $input_max_discount;
+                                        $coupon_amount  = $input_max_discount;
+                                        /**
+                                         * APPLY_FILTERS: ywpar_adjust_discount_value
+                                         *
+                                         * filter the dicount value.
+                                         */
+                                        $discount_value = apply_filters( 'ywpar_adjust_discount_value', $discount_value );
+                                        $coupon_amount  = $discount_value;
+                                };
 
-			} else {
-				WC()->session->set( 'ywpar_coupon_code_points', $max_points );
-				WC()->session->set( 'ywpar_coupon_code_discount', $max_discount );
-				$discount = $max_discount;
-			}
+                        } elseif ( 'gift_product' === $reward_method ) {
+                                $gift_points  = isset( $conversion['points'] ) ? (int) $conversion['points'] : 0;
+                                $gift_product = isset( $conversion['gift_product'] ) ? absint( $conversion['gift_product'] ) : 0;
+                                $gift_amount  = isset( $conversion['money'] ) ? (float) $conversion['money'] : 0;
 
-			WC()->session->set( 'ywpar_coupon_posted', $posted );
+                                if ( $gift_points <= 0 || $gift_product <= 0 ) {
+                                        $this->maybe_remove_gift_product_from_cart();
 
-			// apply the coupon in cart.
-			if ( $apply_coupon && $discount ) {
-				$coupon = $this->get_current_coupon();
-				
-				$coupon->set_usage_count( 0 );
+                                        return;
+                                }
 
-				$is_new = $coupon->get_amount() <= 0;
-				if ( apply_filters( 'ywpar_change_coupon_type_discount', false, $discount, $coupon ) ) {
-					$type_discount = 'percent';
-					$discount      = '100';
-				} else {
-					$type_discount = 'fixed_cart';
-				}
+                                $product = wc_get_product( $gift_product );
+                                if ( ! $product ) {
+                                        $this->maybe_remove_gift_product_from_cart();
 
-				if ( $coupon->get_discount_type() !== $type_discount ) {
-					$coupon->set_discount_type( $type_discount );
-				}
+                                        return;
+                                }
 
-				if ( $coupon->get_amount() !== $discount ) {
-					$coupon->set_amount( $discount );
-				}
+                                if ( $gift_amount <= 0 ) {
+                                        $gift_amount = ywpar_get_product_price( $product, 'redeem' );
+                                }
 
-				/**
-				 * APPLY_FILTERS: ywpar_allow_free_shipping
-				 *
-				 * allow free shipping coupon/discount.
+                                $added = $this->ensure_gift_product_in_cart( $gift_product );
+                                if ( ! $added ) {
+                                        return;
+                                }
+
+                                WC()->session->set( 'ywpar_coupon_code_points', $gift_points );
+                                WC()->session->set( 'ywpar_coupon_code_discount', $gift_amount );
+                                WC()->session->set( 'ywpar_gift_product_id', $gift_product );
+
+                                $discount_value    = $gift_amount;
+                                $coupon_amount     = 100;
+                                $type_discount     = 'percent';
+                                $coupon_properties = array(
+                                        'product_ids'            => array( $gift_product ),
+                                        'limit_usage_to_x_items' => 1,
+                                );
+                        } else {
+                                WC()->session->set( 'ywpar_coupon_code_points', $max_points );
+                                WC()->session->set( 'ywpar_coupon_code_discount', $max_discount );
+                                $discount_value = $max_discount;
+                                $coupon_amount  = $max_discount;
+                        }
+
+                        WC()->session->set( 'ywpar_coupon_posted', $posted );
+
+                        // apply the coupon in cart.
+                        if ( $apply_coupon && $discount_value ) {
+                                $coupon = $this->get_current_coupon();
+
+                                $coupon->set_usage_count( 0 );
+
+                                $is_new = $coupon->get_amount() <= 0;
+                                if ( 'gift_product' !== $reward_method && apply_filters( 'ywpar_change_coupon_type_discount', false, $discount_value, $coupon ) ) {
+                                        $type_discount = 'percent';
+                                        $coupon_amount = '100';
+                                }
+
+                                if ( $coupon->get_discount_type() !== $type_discount ) {
+                                        $coupon->set_discount_type( $type_discount );
+                                }
+
+                                if ( $coupon->get_amount() !== $coupon_amount ) {
+                                        $coupon->set_amount( $coupon_amount );
+                                }
+
+                                if ( 'gift_product' === $reward_method ) {
+                                        $coupon->set_product_ids( $coupon_properties['product_ids'] );
+                                        $coupon->set_limit_usage_to_x_items( $coupon_properties['limit_usage_to_x_items'] );
+                                        $coupon->update_meta_data( 'ywpar_coupon_gift_product', $coupon_properties['product_ids'][0] );
+                                } else {
+                                        $coupon->set_product_ids( array() );
+                                        $coupon->set_limit_usage_to_x_items( 0 );
+                                        $coupon->delete_meta_data( 'ywpar_coupon_gift_product' );
+                                }
+
+                                /**
+                                 * APPLY_FILTERS: ywpar_allow_free_shipping
+                                 *
+                                 * allow free shipping coupon/discount.
 				 */
 				$allow_free_shipping = apply_filters( 'ywpar_allow_free_shipping', ywpar_get_option( 'allow_free_shipping_to_redeem', 'no' ) === 'yes', $discount );
 
@@ -968,21 +1137,21 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Redeeming' ) ) {
 					if ( '' === $coupon->get_meta( 'ywpar_coupon' ) ) {
 						$coupon->update_meta_data( 'ywpar_coupon', 1 );
 						$is_new = true;
-					}
+                                        }
+                                }
+
+                                if ( $is_new || ! empty( $coupon->get_changes() ) ) {
+                                        $coupon->save();
 				}
 
-				if ( $is_new || ! empty( $coupon->get_changes() ) ) {
-					$coupon->save();
-				}
+                                $coupon_label = $coupon->get_code();
 
-				$coupon_label = $coupon->get_code();
-
-				if ( ywpar_coupon_is_valid( $coupon, WC()->cart ) && ! WC()->cart->has_discount( $coupon_label ) ) {
-					WC()->cart->add_discount( $coupon_label );
-					$this->update_discount();
-				}
-			}
-		}
+                                if ( ywpar_coupon_is_valid( $coupon, WC()->cart ) && ! WC()->cart->has_discount( $coupon_label ) ) {
+                                        WC()->cart->add_discount( $coupon_label );
+                                        $this->update_discount();
+                                }
+                        }
+                }
 
 		/**
 		 * Returns the usage limit parameter to do a coupon. The function check the option 'other_coupons'.
@@ -1322,21 +1491,121 @@ if ( ! class_exists( 'YITH_WC_Points_Rewards_Redeeming' ) ) {
 		 *
 		 * @return void
 		 */
-		public function clear_current_coupon( $coupon_code ) {
-			$current_coupon = $this->get_current_coupon();
-			if ( $current_coupon instanceof WC_Coupon && $current_coupon->get_code() === $coupon_code && apply_filters( 'ywpar_clear_current_coupon', true ) ) {
-				$current_coupon->delete();
-			}
-		}
+                public function clear_current_coupon( $coupon_code ) {
+                        $current_coupon = $this->get_current_coupon();
+                        if ( $current_coupon instanceof WC_Coupon && $current_coupon->get_code() === $coupon_code && apply_filters( 'ywpar_clear_current_coupon', true ) ) {
+                                $current_coupon->delete();
+                                $this->maybe_remove_gift_product_from_cart();
+                        }
+                }
 
 
-		/**
-		 * Calculate the discount value for Reward Message
-		 * *
-		 *
-		 * @return void
-		 * @since  2.0.0
-		 */
+                /**
+                 * Ensure gift products are displayed at zero price.
+                 *
+                 * @param WC_Cart $cart Cart instance.
+                 */
+                public function set_gift_product_price( $cart ) {
+                        if ( is_admin() && ! defined( 'DOING_AJAX' ) ) {
+                                return;
+                        }
+
+                        if ( ! $cart || ! is_object( $cart ) || ! method_exists( $cart, 'get_cart' ) ) {
+                                return;
+                        }
+
+                        foreach ( $cart->get_cart() as $cart_item_key => $cart_item ) {
+                                if ( empty( $cart_item['ywpar_gift_reward'] ) ) {
+                                        continue;
+                                }
+
+                                if ( isset( $cart->cart_contents[ $cart_item_key ]['data'] ) ) {
+                                        $cart->cart_contents[ $cart_item_key ]['data']->set_price( 0 );
+                                }
+                        }
+                }
+
+                /**
+                 * Append a label to cart items granted as a gift reward.
+                 *
+                 * @param string $name          Item name.
+                 * @param array  $cart_item     Cart item data.
+                 * @param string $cart_item_key Cart item key.
+                 *
+                 * @return string
+                 */
+                public function add_gift_product_label( $name, $cart_item, $cart_item_key ) {
+                        if ( empty( $cart_item['ywpar_gift_reward'] ) ) {
+                                return $name;
+                        }
+
+                        $label = apply_filters(
+                                'ywpar_gift_product_cart_label',
+                                __( 'produit offert', 'yith-woocommerce-points-and-rewards' ),
+                                array(
+                                        'context'   => 'cart_item',
+                                        'cart_item' => $cart_item,
+                                        'key'       => $cart_item_key,
+                                )
+                        );
+
+                        return $name . ' <span class="ywpar-gift-label">' . esc_html( $label ) . '</span>';
+                }
+
+                /**
+                 * Add or find the gift product inside the cart.
+                 *
+                 * @param int $product_id Product identifier.
+                 *
+                 * @return string|false Cart item key on success or false on failure.
+                 */
+                protected function ensure_gift_product_in_cart( $product_id ) {
+                        if ( ! WC()->cart ) {
+                                return false;
+                        }
+
+                        foreach ( WC()->cart->get_cart() as $cart_item_key => $cart_item ) {
+                                if ( ! empty( $cart_item['ywpar_gift_reward'] ) && (int) $cart_item['product_id'] === (int) $product_id ) {
+                                        return $cart_item_key;
+                                }
+                        }
+
+                        return WC()->cart->add_to_cart( $product_id, 1, 0, array(), array( 'ywpar_gift_reward' => true ) );
+                }
+
+                /**
+                 * Remove the gift product added by the redeeming rule.
+                 *
+                 * @param int $product_id Optional product identifier to remove.
+                 */
+                protected function maybe_remove_gift_product_from_cart( $product_id = 0 ) {
+                        if ( ! WC()->cart ) {
+                                return;
+                        }
+
+                        $gift_product_id = $product_id ? absint( $product_id ) : absint( WC()->session->get( 'ywpar_gift_product_id' ) );
+
+                        if ( ! $gift_product_id ) {
+                                return;
+                        }
+
+                        foreach ( WC()->cart->get_cart() as $cart_item_key => $cart_item ) {
+                                if ( ! empty( $cart_item['ywpar_gift_reward'] ) && (int) $cart_item['product_id'] === $gift_product_id ) {
+                                        WC()->cart->remove_cart_item( $cart_item_key );
+                                }
+                        }
+
+                        WC()->session->set( 'ywpar_gift_product_id', 0 );
+                }
+
+
+                /**
+                 * Calculate the discount value for Reward Message
+                 * *
+                 *
+                 * @return void
+                 * @since  2.0.0
+                 */
 		public function calc_discount_value() {
 			check_ajax_referer( 'calc_discount_value', 'security' );
 			if ( isset( $_POST['input_points'], $_POST['max_points'], $_POST['method'] ) ) {
